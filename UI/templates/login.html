@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Login - YCAP Email{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h2>Login to YCAP Email</h2>
+    <form method="POST" action="{{ url_for('login') }}">
+        <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="text" id="email" name="email" class="form-control" required placeholder="username^ycap.com">
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+    </form>
+    <p style="margin-top: 1rem; text-align: center;">
+        Don't have an account? <a href="{{ url_for('signup') }}">Sign up</a>
+    </p>
+</div>
+{% endblock %}
