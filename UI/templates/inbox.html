@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Inbox - YCAP Email{% endblock %}
+
+{% block content %}
+<div class="email-list">
+    <h2 style="padding: 1rem;">Inbox</h2>
+    {% if emails %}
+        {% for email in emails %}
+            <div class="email-item">
+                <div>
+                    <strong>From: {{ email[1] }}</strong>
+                    <div class="email-meta">
+                        Type: {{ email[3] }}
+                        <span style="margin-left: 1rem;">ID: {{ email[0] }}</span>
+                    </div>
+                </div>
+                <div>
+                    <a href="{{ url_for('view_email', mail_id=email[0]) }}" class="btn btn-primary">View</a>
+                    <a href="{{ url_for('delete_email', mail_id=email[0]) }}" class="btn btn-primary" style="background-color: #e74c3c;">Delete</a>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p style="padding: 1rem; text-align: center;">No emails in inbox.</p>
+    {% endif %}
+</div>
+{% endblock %}

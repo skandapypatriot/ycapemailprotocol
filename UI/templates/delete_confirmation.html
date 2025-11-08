@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Email Deleted - YCAP Email{% endblock %}
+
+{% block content %}
+<div class="form-container" style="text-align: center;">
+    <h2>Email Deleted</h2>
+    <p>The email with ID: <strong>{{ mail_id }}</strong> has been deleted successfully.</p>
+    <div style="margin-top: 2rem;">
+        {% if source == 'sent' %}
+            <a href="{{ url_for('sent') }}" class="btn btn-primary">Back to Sent</a>
+        {% else %}
+            <a href="{{ url_for('inbox') }}" class="btn btn-primary">Back to Inbox</a>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

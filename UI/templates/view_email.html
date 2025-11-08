@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}View Email - YCAP Email{% endblock %}
+
+{% block content %}
+<div class="email-view">
+    <div class="email-header">
+        <h2>Email Details</h2>
+        <div style="margin-top: 1rem;">
+            <strong>From:</strong> {{ email[1] }}<br>
+            <strong>To:</strong> {{ email[2] }}<br>
+            <strong>Type:</strong> {{ email[3] }}<br>
+            <strong>ID:</strong> {{ email[0] }}
+        </div>
+    </div>
+    <div class="email-content">
+            {{ email[4]|safe }}
+    </div>
+    <div style="margin-top: 2rem;">
+        <a href="{{ url_for('delete_email', mail_id=email[0]) }}" class="btn btn-primary" style="background-color: #e74c3c;" onclick="return confirm('Are you sure you want to delete this email?')">Delete Email</a>
+    </div>
+</div>
+{% endblock %}
