@@ -257,6 +257,7 @@ class Server:
                 }
                 connection.send(json.dumps(response).encode())
         if command == "TISAHUR": # Actually its ti ti ti ti sahur
+            pass
             
         
 
