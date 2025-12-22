@@ -256,7 +256,9 @@ class Server:
                 "return": ["MAIL_NOT_DELETED", "MAIL_OR_MAIL_ID_DOESNT_EXIST"]
                 }
                 connection.send(json.dumps(response).encode())
+        if command == "TISAHUR": # Actually its ti ti ti ti sahur
             
+        
 
     def handle_client(self, ):
         # handle the most recent connection (caller adds new connections)
