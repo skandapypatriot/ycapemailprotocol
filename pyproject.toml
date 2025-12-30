@@ -1,0 +1,11 @@
+[project]
+name = "email-protocol"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "cryptography>=46.0.3",
+    "flask>=2.3.2",
+    "markdown>=3.4.4",
+]

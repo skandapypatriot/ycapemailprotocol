@@ -146,7 +146,7 @@ Welcome to the YCAP Email Protocol, where emails rizz, packets noop, and servers
 
 1. Clone the repo:
 ```bash
-git clone https://github.com/yourusername/ycap-mail.git
+git clone https://github.com//ycap-mail.git
 cd ycap-mail
 ```
 

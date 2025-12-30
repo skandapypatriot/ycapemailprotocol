@@ -3,21 +3,90 @@
 {% block title %}Sign Up - YCAP Email{% endblock %}
 
 {% block content %}
-<div class="form-container">
-    <h2>Create YCAP Email Account</h2>
-    <form method="POST" action="{{ url_for('signup') }}">
-        <div class="form-group">
-            <label for="email">Email Address</label>
-            <input type="text" id="email" name="email" class="form-control" required placeholder="username^ycap.com">
-        </div>
-        <div class="form-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" class="form-control" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Sign Up</button>
-    </form>
-    <p style="margin-top: 1rem; text-align: center;">
-        Already have an account? <a href="{{ url_for('login') }}">Login</a>
-    </p>
+<div style="max-width: 400px; margin: 5rem auto;">
+    <div class="card">
+        <h2 style="margin-bottom: 2rem; text-align: center;">YCAP Email Sign Up</h2>
+        
+        <div id="alert"></div>
+        
+        <form id="signupForm">
+            <div style="margin-bottom: 1rem;">
+                <label for="email">Email:</label>
+                <input type="text" id="email" name="email" required 
+                       placeholder="admin or admin^ycap.com"
+                       style="width: 100%; padding: 0.75rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 5px;">
+                <small style="color: #999; display: block; margin-top: 0.3rem;">Format: username or username^ycap.com</small>
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required
+                       style="width: 100%; padding: 0.75rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 5px;">
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label for="confirmPassword">Confirm Password:</label>
+                <input type="password" id="confirmPassword" name="confirmPassword" required
+                       style="width: 100%; padding: 0.75rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 5px;">
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <label for="host">Server Host:</label>
+                <input type="text" id="host" name="host" value="localhost"
+                       style="width: 100%; padding: 0.75rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 5px;">
+            </div>
+            
+            <div style="margin-bottom: 2rem;">
+                <label for="port">Server Port:</label>
+                <input type="number" id="port" name="port" value="1200"
+                       style="width: 100%; padding: 0.75rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 5px;">
+            </div>
+            
+            <button type="submit" class="btn" style="width: 100%; margin-bottom: 1rem;">Sign Up</button>
+        </form>
+        
+        <p style="text-align: center;">Already have an account? <a href="/login" style="color: #667eea; text-decoration: none;">Login</a></p>
+    </div>
 </div>
+
+<script>
+    document.getElementById('signupForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const alert = document.getElementById('alert');
+        
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        
+        if (password !== confirmPassword) {
+            alert.innerHTML = `<div class="alert alert-error">Passwords do not match</div>`;
+            return;
+        }
+        
+        try {
+            const response = await fetch('/signup', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    email: document.getElementById('email').value.trim(),
+                    password: password,
+                    host: document.getElementById('host').value.trim(),
+                    port: document.getElementById('port').value
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                alert.innerHTML = `<div class="alert alert-success">${data.message}</div>`;
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 2000);
+            } else {
+                alert.innerHTML = `<div class="alert alert-error">${data.error}</div>`;
+            }
+        } catch (e) {
+            alert.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+        }
+    });
+</script>
 {% endblock %}

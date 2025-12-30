@@ -1,3 +1,6 @@
 .vscode/
 __pycache__/
 mails.db-journal
+modules.txt
+.venv/
+s

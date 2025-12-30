@@ -1,0 +1,376 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - YCAP Email{% endblock %}
+
+{% block navbar %}
+<div class="navbar">
+    <h1>✉️ YCAP Email</h1>
+    <div class="navbar-right">
+        <span>{{ email }}</span>
+        <a href="/logout">Logout</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .main-grid {
+        display: grid;
+        grid-template-columns: 250px 1fr;
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+    .sidebar {
+        background: white;
+        border-radius: 10px;
+        padding: 1rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        height: fit-content;
+    }
+    .sidebar-item {
+        padding: 0.75rem;
+        margin: 0.5rem 0;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background 0.3s;
+    }
+    .sidebar-item:hover {
+        background: #f0f0f0;
+    }
+    .sidebar-item.active {
+        background: #667eea;
+        color: white;
+    }
+    .mail-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .mail-item {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+        transition: transform 0.3s, box-shadow 0.3s;
+        border-left: 4px solid #667eea;
+    }
+    .mail-item:hover {
+        transform: translateX(5px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+    }
+    .mail-item.file {
+        border-left-color: #27ae60;
+    }
+    .mail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    .mail-from {
+        font-weight: bold;
+        color: #333;
+    }
+    .mail-type-badge {
+        background: #667eea;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+    }
+    .mail-type-badge.file {
+        background: #27ae60;
+    }
+    .mail-preview {
+        color: #666;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .compose-section {
+        display: none;
+    }
+    .compose-section.active {
+        display: block;
+    }
+    .file-upload {
+        border: 2px dashed #667eea;
+        border-radius: 10px;
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: background 0.3s;
+    }
+    .file-upload:hover {
+        background: #f0f0f0;
+    }
+    .file-upload.dragover {
+        background: #e8e8ff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="main-grid">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h3 style="margin-bottom: 1rem;">Menu</h3>
+        <div class="sidebar-item active" onclick="showSection('inbox')">📥 Inbox</div>
+        <div class="sidebar-item" onclick="showSection('sent')">📤 Sent</div>
+        <div class="sidebar-item" onclick="showSection('compose')">✏️ Compose</div>
+    </div>
+    
+    <!-- Main Content -->
+    <div>
+        <!-- Inbox Section -->
+        <div id="inbox" class="section active">
+            <div class="card">
+                <h2>Inbox</h2>
+                <div id="inboxList" class="mail-list" style="margin-top: 1rem;"></div>
+            </div>
+        </div>
+        
+        <!-- Sent Section -->
+        <div id="sent" class="section" style="display: none;">
+            <div class="card">
+                <h2>Sent Messages</h2>
+                <div id="sentList" class="mail-list" style="margin-top: 1rem;"></div>
+            </div>
+        </div>
+        
+        <!-- Compose Section -->
+        <div id="compose" class="section" style="display: none;">
+            <div class="card">
+                <h2>Compose Message</h2>
+                <div style="margin-top: 1rem;">
+                    <div style="margin-bottom: 1rem;">
+                        <label for="composeTo">To:</label>
+                        <input type="email" id="composeTo" placeholder="recipient@ycap.com"
+                               style="width: 100%; padding: 0.75rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 5px;">
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <label>Type:</label>
+                        <select id="composeType" style="width: 100%; padding: 0.75rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 5px;">
+                            <option value="text">Text Message</option>
+                            <option value="html">HTML Message</option>
+                            <option value="file">Send File</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Text Message -->
+                    <div id="textCompose" style="margin-bottom: 1rem;">
+                        <label for="composeContent">Message:</label>
+                        <textarea id="composeContent" placeholder="Type your message..."
+                                  style="width: 100%; padding: 0.75rem; margin-top: 0.5rem; border: 1px solid #ddd; border-radius: 5px; min-height: 200px;"></textarea>
+                        <button class="btn" onclick="sendTextMail()" style="margin-top: 1rem;">Send Message</button>
+                    </div>
+                    
+                    <!-- File Upload -->
+                    <div id="fileCompose" style="display: none; margin-bottom: 1rem;">
+                        <div class="file-upload" id="fileDropZone">
+                            <p>📁 Drag and drop file here or click to select</p>
+                            <input type="file" id="fileInput" style="display: none;">
+                        </div>
+                        <div id="fileName" style="margin-top: 1rem; color: #666;"></div>
+                        <button class="btn" onclick="sendFileMail()" style="margin-top: 1rem;">Send File</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mail Detail Modal -->
+<div id="mailModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; padding: 2rem;">
+    <div class="card" style="max-width: 600px; margin: 5rem auto; position: relative;">
+        <button onclick="closeMail()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; cursor: pointer;">✕</button>
+        <div id="mailContent"></div>
+    </div>
+</div>
+
+<script>
+    let selectedFile = null;
+    
+    // Setup file upload
+    document.getElementById('composeType').addEventListener('change', (e) => {
+        document.getElementById('textCompose').style.display = e.target.value === 'file' ? 'none' : 'block';
+        document.getElementById('fileCompose').style.display = e.target.value === 'file' ? 'block' : 'none';
+    });
+    
+    const fileDropZone = document.getElementById('fileDropZone');
+    fileDropZone.addEventListener('click', () => document.getElementById('fileInput').click());
+    fileDropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        fileDropZone.classList.add('dragover');
+    });
+    fileDropZone.addEventListener('dragleave', () => fileDropZone.classList.remove('dragover'));
+    fileDropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        fileDropZone.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            selectedFile = files[0];
+            document.getElementById('fileName').textContent = `Selected: ${selectedFile.name}`;
+        }
+    });
+    
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            selectedFile = e.target.files[0];
+            document.getElementById('fileName').textContent = `Selected: ${selectedFile.name}`;
+        }
+    });
+    
+    function showSection(section) {
+        // Hide all sections
+        document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+        document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
+        
+        // Show selected section
+        document.getElementById(section).style.display = 'block';
+        event.target.classList.add('active');
+        
+        // Load data
+        if (section === 'inbox') {
+            loadInbox();
+        } else if (section === 'sent') {
+            loadSent();
+        }
+    }
+    
+    async function loadInbox() {
+        const response = await fetch('/api/mails');
+        const mails = await response.json();
+        renderMailList(mails, 'inboxList');
+    }
+    
+    async function loadSent() {
+        const response = await fetch('/api/sent');
+        const mails = await response.json();
+        renderMailList(mails, 'sentList');
+    }
+    
+    function renderMailList(mails, elementId) {
+        const container = document.getElementById(elementId);
+        if (mails.length === 0) {
+            container.innerHTML = '<p style="color: #999;">No messages</p>';
+            return;
+        }
+        
+        container.innerHTML = mails.map(mail => `
+            <div class="mail-item ${mail.is_file ? 'file' : ''}" onclick="showMail('${mail.id}', ${JSON.stringify(mail).replace(/'/g, "&apos;")})">
+                <div class="mail-header">
+                    <span class="mail-from">${mail.from}</span>
+                    <span class="mail-type-badge ${mail.is_file ? 'file' : ''}">${mail.is_file ? '📎 File' : mail.type}</span>
+                </div>
+                <div class="mail-preview">${mail.is_file ? mail.file_info.filename : mail.data.substring(0, 100)}</div>
+            </div>
+        `).join('');
+    }
+    
+    function showMail(id, mail) {
+        const modal = document.getElementById('mailModal');
+        const content = document.getElementById('mailContent');
+        
+        let html = `
+            <h3>From: ${mail.from}</h3>
+            <p><strong>To:</strong> ${mail.to}</p>
+            <p><strong>Type:</strong> ${mail.type}</p>
+            <hr>
+        `;
+        
+        if (mail.is_file) {
+            html += `
+                <div>
+                    <p><strong>File:</strong> ${mail.file_info.filename}</p>
+                    <p><strong>Size:</strong> ${(mail.file_info.size / 1024).toFixed(2)} KB</p>
+                    <p><strong>Hash:</strong> ${mail.file_info.hash}</p>
+                    <button class="btn" onclick="downloadFile('${mail.file_info.hash}', '${mail.file_info.filename}')">⬇️ Download</button>
+                </div>
+            `;
+        } else {
+            html += `<p>${mail.data}</p>`;
+        }
+        
+        html += `<button class="btn btn-danger" onclick="deleteMail('${id}')" style="margin-top: 1rem;">Delete</button>`;
+        
+        content.innerHTML = html;
+        modal.style.display = 'block';
+    }
+    
+    function closeMail() {
+        document.getElementById('mailModal').style.display = 'none';
+    }
+    
+    async function sendTextMail() {
+        const to = document.getElementById('composeTo').value;
+        const content = document.getElementById('composeContent').value;
+        
+        if (!to || !content) {
+            alert('Please fill in all fields');
+            return;
+        }
+        
+        const response = await fetch('/api/send-mail', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({to, type: 'text', content})
+        });
+        
+        if (response.ok) {
+            alert('Message sent!');
+            document.getElementById('composeTo').value = '';
+            document.getElementById('composeContent').value = '';
+        } else {
+            alert('Error sending message');
+        }
+    }
+    
+    async function sendFileMail() {
+        const to = document.getElementById('composeTo').value;
+        
+        if (!to || !selectedFile) {
+            alert('Please select recipient and file');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('to', to);
+        formData.append('file', selectedFile);
+        
+        const response = await fetch('/api/send-file', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (response.ok) {
+            alert('File sent!');
+            document.getElementById('composeTo').value = '';
+            selectedFile = null;
+            document.getElementById('fileName').textContent = '';
+        } else {
+            alert('Error sending file');
+        }
+    }
+    
+    async function downloadFile(hash, filename) {
+        window.location.href = `/api/download-file/${hash}`;
+    }
+    
+    async function deleteMail(id) {
+        if (!confirm('Delete this message?')) return;
+        
+        const response = await fetch(`/api/delete-mail/${id}`, {method: 'DELETE'});
+        
+        if (response.ok) {
+            closeMail();
+            loadInbox();
+        }
+    }
+    
+    // Load inbox on page load
+    loadInbox();
+</script>
+{% endblock %}

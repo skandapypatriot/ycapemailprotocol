@@ -41,7 +41,7 @@ class Server:
         self.host = host
         self.port = port
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # allow access from multiple threads
+        self.s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10 ** 7)
         self.db = sqlite3.connect("mails.db", check_same_thread=False)
         try:
             self.s.bind((host, port))
@@ -52,12 +52,11 @@ class Server:
         # Ensure mail table exists
         self.c.execute("""
         CREATE TABLE IF NOT EXISTS mail (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id TEXT PRIMARY KEY,
             from_ TEXT,
             to_ TEXT,
             type_ TEXT,
-            data TEXT,
-            id INTEGER
+            data TEXT
         )
         """)
         self.c.execute("""
@@ -93,35 +92,49 @@ class Server:
         del password
 
     def start_listening(self):
-        while True:
-            self.s.listen()
-            connection = self.s.accept()
-            print(f"Got connection from {connection[1]}")
-            email = connection[0].recv(1024).decode()
-            super_secret_key = fernet.Fernet.generate_key()
-            defaut_YCAP_key = os.popen("echo %YCAP_KEY%").read()
-            fernet_YCAP = fernet.Fernet(defaut_YCAP_key)
-            self.fernet_for_AGkey = fernet.Fernet(super_secret_key)
-            connection[0].send(fernet_YCAP.encrypt(super_secret_key))
+        while self.running:
+            try:
+                self.s.listen()
+                connection, addr = self.s.accept()
+                print(f"Got connection from {addr}")
+                
+                email = connection.recv(1024).decode()
+                super_secret_key = fernet.Fernet.generate_key()
+                defaut_YCAP_key = os.popen("echo %YCAP_KEY%").read()
+                fernet_YCAP = fernet.Fernet(defaut_YCAP_key)
+                self.fernet_for_AGkey = fernet.Fernet(super_secret_key)
+                connection.send(fernet_YCAP.encrypt(super_secret_key))
 
-            if self.login(connection[0], email) == True:
-                connection[0].send(json.dumps(["USER SECURELY VERIFIED"]).encode())
-                salt = secrets.token_hex(8)  
-                self.connections.update({salt:[connection[0], email]})
-                connection[0].send(str(salt).encode())
-            else:
-                connection[0].send(json.dumps(["404:-USER NOT FOUND"]).encode())
-                response = json.loads(connection[0].recv(1024).decode())
-                if response[0] == "SIGN UP":
-                    credentials_e = json.loads(connection[0].recv(1024))
-                    credentials = []
-                    for i in credentials_e:
-                        credentials.append(self.fernet_for_AGkey.decrypt(i).decode())
-                    self.signup(credentials[0],  credentials[1])
+                if self.login(connection, email) == True:
+                    connection.send(json.dumps(["USER SECURELY VERIFIED"]).encode())
+                    salt = secrets.token_hex(8)  
+                    self.connections.update({salt: [connection, email]})
+                    connection.send(str(salt).encode())
+                    # Start client handler thread for this connection
+                    t = threading.Thread(target=self.handle_client, args=(salt,), daemon=True)
+                    t.start()
+                    self.client_threads.append(t)
+
                 else:
-                    continue
-            
-            
+                    connection.send(json.dumps(["404:-USER NOT FOUND"]).encode())
+                    response = json.loads(connection.recv(1024).decode())
+                    if response[0] == "SIGN UP":
+                        credentials_e = json.loads(connection.recv(1024))
+                        credentials = []
+                        for i in credentials_e:
+                            credentials.append(self.fernet_for_AGkey.decrypt(i).decode())
+                        self.signup(credentials[0],  credentials[1])
+                        salt = secrets.token_hex(8)
+                        self.connections.update({salt: [connection, email]})
+                        connection.send(str(salt).encode())
+                        t = threading.Thread(target=self.handle_client, args=(salt,), daemon=True)
+                        t.start()
+                        self.client_threads.append(t)
+                    else:
+                        connection.close()
+            except Exception as e:
+                print(f"Error in start_listening: {e}")
+                continue
 
     def handle_packet(self, packet, connection, key):
         command = packet.get("command")
@@ -214,17 +227,30 @@ class Server:
             connection.send(json.dumps(response).encode())
             return
         if command == "YAP":
-            # Expecting arguments: [[from, to], type, data]
+            # Expecting arguments: [[from, to], type, data, file_hash (optional)]
             from_ = arg[0][0]
             to_ = arg[0][1]
             mail_type = arg[1]
-            mail_data =arg[2]
+            mail_data = arg[2]
+            file_hash = arg[3] if len(arg) > 3 else None
             mail_id = secrets.token_hex(8)
+            
             if self.c.execute("SELECT username FROM users WHERE username=?", [to_]).fetchall() != []:
+                # Create email content with optional file attachment
+                email_content = {
+                    "text": mail_data,
+                    "type": mail_type
+                }
+                if file_hash:
+                    email_content["file_hash"] = file_hash
+                
                 # Insert mail into database
-                self.c.execute("INSERT INTO mail (from_, to_, type_, data, id) VALUES (?, ?, ?, ?, ?)", (from_, to_, mail_type, mail_data, mail_id))
-              # Get the ID of the newly inserted mail
+                self.c.execute(
+                    "INSERT INTO mail (id, from_, to_, type_, data) VALUES (?, ?, ?, ?, ?)", 
+                    (mail_id, from_, to_, mail_type, json.dumps(email_content))
+                )
                 self.db.commit()
+                
                 # Send response to client with the new mail ID
                 response = {
                     "connection_key": str(key),
@@ -233,16 +259,17 @@ class Server:
                 }
             else:
                 response = {
-                "connection_key": str(key),
-                "command": "YAP",
-                "return": ["MAIL_NOT_SENT", "TO_USER_NOT_EXIST"]
-            }
+                    "connection_key": str(key),
+                    "command": "YAP",
+                    "return": ["MAIL_NOT_SENT", "TO_USER_NOT_EXIST"]
+                }
 
             connection.send(json.dumps(response).encode())
         if command == "NYAP":
             id = arg[0]
             if not self.c.execute('SELECT * FROM mail WHERE id = ?', [id]).fetchall() == []:
                 self.c.execute("DELETE FROM mail WHERE id = ?", [id])
+                self.db.commit()
                 response = {
                     "connection_key": str(key),
                     "command": "NYAP",
@@ -261,12 +288,14 @@ class Server:
             
         
 
-    def handle_client(self, ):
-        # handle the most recent connection (caller adds new connections)
-        connection = list(self.connections.values())[-1][0]
-        while self.running:
+    def handle_client(self, key):
+        # Handle client connection for specific key
+        if key not in self.connections:
+            return
+        connection = self.connections[key][0]
+        while self.running and key in self.connections:
             try:
-                data = connection.recv(10500000)
+                data = connection.recv(4096)
                 if not data:
                     break
                 packet = data.decode()
@@ -278,16 +307,16 @@ class Server:
                 except Exception:
                     continue
                 try:
-                    key = packet.get("connection_key")
+                    key_check = packet.get("connection_key")
                 except Exception:
-                    key = None
-                if key is None or self.connections.get(key) is None:
+                    key_check = None
+                if key_check is None or self.connections.get(key_check) is None:
                     print("Invalid key found! Removing Connection")
                     # try to remove mapping for this connection
                     try:
                         to_remove = None
                         for k, v in list(self.connections.items()):
-                            if v == connection:
+                            if v[0] == connection:
                                 to_remove = k
                                 break
                         if to_remove is not None:
@@ -299,22 +328,28 @@ class Server:
                     except Exception:
                         pass
                     break
-                self.handle_packet(packet, connection, key)
+                self.handle_packet(packet, connection, key_check)
+        
+        # Clean up when client disconnects
+        try:
+            if key in self.connections:
+                self.connections.pop(key)
+        except Exception:
+            pass
+        try:
+            connection.close()
+        except Exception:
+            pass
+
     def ycap_run(self):
         connect_thread = threading.Thread(target=self.start_listening, daemon=True)
         connect_thread.start()
         # start Ctrl+B listener (Windows)
         if msvcrt is not None:
             threading.Thread(target=self._ctrl_b_listener, daemon=True).start()
-        current_connections = len(self.connections)
         try:
             while self.running:
-                if len(self.connections) > current_connections:
-                    t = threading.Thread(target=self.handle_client, daemon=True)
-                    t.start()
-                    self.client_threads.append(t)
-                    current_connections = len(self.connections)
-                time.sleep(0.2)
+                time.sleep(0.5)
         except KeyboardInterrupt:
             print("KeyboardInterrupt received. Shutting down.")
             self.shutdown()
@@ -334,6 +369,19 @@ class Server:
                 break
             time.sleep(0.1)
 
+    def connect_to_file_server(self, ):
+        self.s_fs = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s_fs.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10 ** 7)
+        self.s_fs.bind("localhost", 8457)
+        self.super_secret_file_key = os.popen("echo %YCAP_FILE_KEY%").read()
+        got = False
+        while not got:
+            conn = self.s.accept()
+            conn = conn[0]
+            if conn.recv(1024).decode() == "":
+                pass
+
+
     def shutdown(self):
         print("Shutting down server gracefully...")
         self.running = False
@@ -342,9 +390,9 @@ class Server:
                 self.s.close()
             except Exception:
                 pass
-            for k, conn in list(self.connections.items()):
+            for k, conn_data in list(self.connections.items()):
                 try:
-                    conn.close()
+                    conn_data[0].close()
                 except Exception:
                     pass
             for t in self.client_threads:
@@ -360,7 +408,7 @@ class Server:
             try:
                 os._exit(0)
             except Exception:
-                return
+                pass
 
 
 
