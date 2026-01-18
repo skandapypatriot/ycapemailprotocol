@@ -7,6 +7,7 @@ import warnings
 import secrets
 import base64
 import hashlib
+import datetime
 
 """
 YCAP Protocol Client Implementation
@@ -71,7 +72,7 @@ class Client:
     def __init__(self, host, port, mailaddress, password, file_server_addr=("localhost", 5124)):
         self.host = host
         self.port = port
-        self.emailaddress = normalize_email(mailaddress)
+        self.emailaddress = normalize_email(mailaddress) 
         self.file_server_addr = file_server_addr
         
         self.address = (host, port)
@@ -156,33 +157,35 @@ class Client:
         Returns:
             dict: Server response containing status and new mail ID
         """
+        print(mail_type)
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10 ** 7)
-        
+        now = datetime.datetime.now()
+        timestamp = f"{now:%d-%m-%y (%H:%M:%S)}"
         file_hash = None
         
         # If file is provided, upload it first
         if file_path:
             if not os.path.exists(file_path):
                 print(f"File not found: {file_path}")
-                return None
-            
-            filename = os.path.basename(file_path)
-            with open(file_path, 'rb') as f:
-                filedata = f.read()
-            
-            filesize = len(filedata)
-            file_hash = hashlib.sha256(filedata).hexdigest()[:16]
-            
-            # Upload file to file server
-            if not self._upload_to_file_server(file_hash, filename, filedata):
-                print("Warning: File upload failed, sending email without attachment")
-                file_hash = None
+                
+            else:
+                filename = os.path.basename(file_path)
+                with open(file_path, 'rb') as f:
+                    filedata = f.read()
+
+                filesize = len(filedata) / 1024
+                file_hash = hashlib.sha256(filedata).hexdigest()[:16]
+
+                # Upload file to file server
+                if not self._upload_to_file_server(file_hash, filename, filedata):
+                    print("Warning: File upload failed, sending email without attachment")
+                    file_hash = None
         
         # Send email
         packet = {
             "connection_key": self.key,
             "command": "YAP",
-            "arguments": [[self.emailaddress, to_addr], mail_type, mail_data]
+            "arguments": [[self.emailaddress, to_addr, timestamp], mail_type, mail_data, ]
         }
         
         # Add file hash if file was uploaded
@@ -234,12 +237,11 @@ class Client:
                 return False
             
             # Upload file
-            filedata_b64 = base64.b64encode(filedata).decode()
             upload_packet = {
                 "command": "UPLOAD",
                 "file_hash": file_hash,
+                "file_data":filedata,
                 "filename": filename,
-                "filedata": filedata_b64
             }
             fs.send(json.dumps(upload_packet).encode())
             upload_response = json.loads(fs.recv(1024).decode())
@@ -370,7 +372,6 @@ class Client:
             return None
         try:
             answer_packet = json.loads(self.s.recv(8192).decode())
-            print(answer_packet)
             mails = []
             if len(answer_packet.get("return")) > no:
                 for i in range(no):
@@ -378,7 +379,6 @@ class Client:
             else:
                 for i in answer_packet.get("return"):
                     mails.append(self.GMA(i))   
-            print(mails)
             return mails
         except Exception as e:
             print("No response or error:", e)

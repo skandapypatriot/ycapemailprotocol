@@ -22,11 +22,23 @@ if not defined YCAP_KEY (
     echo YCAP_KEY already set
 )
 
+if not defined YCAP_FILE_KEY (
+    echo Generating YCAP_FILE_KEY...
+    for /f "delims=" %%A in ('python -c "from cryptography import fernet; print(fernet.Fernet.generate_key().decode())"') do (
+        set "YCAP_FILE_KEY=%%A"
+    )
+    setx YCAP_FILE_KEY "!YCAP_KEY!"
+    echo YCAP_FILE_KEY generated and saved: !YCAP_KEY!
+) else (
+    echo YCAP_FILE_KEY already set
+)
+
 echo.
 echo ========================================
 echo Environment Variables Initialized
 echo ========================================
 echo YCAP_KEY: !YCAP_KEY!
+echo YCAP_FILE_KEY !YCAP_FILE_KEY!
 echo Current Directory: %CD%
 echo.
 

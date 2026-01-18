@@ -56,7 +56,8 @@ class Server:
             from_ TEXT,
             to_ TEXT,
             type_ TEXT,
-            data TEXT
+            data TEXT,
+            timestamp TEST
         )
         """)
         self.c.execute("""
@@ -217,8 +218,9 @@ class Server:
             connection.send(json.dumps(response).encode())
         if command == "GMA": 
             mail_id = arg[0]
-            query = "SELECT id, from_, to_, type_, data FROM mail WHERE id=?"
+            query = "SELECT id, from_, to_, type_, data, timestamp FROM mail WHERE id=?"
             result = self.c.execute(query, [mail_id]).fetchall()
+            print(result)
             response = {
                     "connection_key": str(key),
                     "command": "GMA",
@@ -228,26 +230,26 @@ class Server:
             return
         if command == "YAP":
             # Expecting arguments: [[from, to], type, data, file_hash (optional)]
+            print(arg)
             from_ = arg[0][0]
             to_ = arg[0][1]
             mail_type = arg[1]
-            mail_data = arg[2]
+            mail_data:str = arg[2]
             file_hash = arg[3] if len(arg) > 3 else None
             mail_id = secrets.token_hex(8)
+            timestamp = arg[0][2]
             
             if self.c.execute("SELECT username FROM users WHERE username=?", [to_]).fetchall() != []:
                 # Create email content with optional file attachment
-                email_content = {
-                    "text": mail_data,
-                    "type": mail_type
-                }
+                email_content = mail_data.strip('"')
+                
                 if file_hash:
                     email_content["file_hash"] = file_hash
                 
                 # Insert mail into database
                 self.c.execute(
-                    "INSERT INTO mail (id, from_, to_, type_, data) VALUES (?, ?, ?, ?, ?)", 
-                    (mail_id, from_, to_, mail_type, json.dumps(email_content))
+                    "INSERT INTO mail (id, from_, to_, type_, data, timestamp) VALUES (?, ?, ?, ?, ?, ?)", 
+                    (mail_id, from_, to_, mail_type, json.dumps(email_content), timestamp)
                 )
                 self.db.commit()
                 
@@ -344,6 +346,8 @@ class Server:
     def ycap_run(self):
         connect_thread = threading.Thread(target=self.start_listening, daemon=True)
         connect_thread.start()
+        fs_thread = threading.Thread(target=self.connect_to_file_server)
+        fs_thread.start()
         # start Ctrl+B listener (Windows)
         if msvcrt is not None:
             threading.Thread(target=self._ctrl_b_listener, daemon=True).start()
@@ -372,14 +376,25 @@ class Server:
     def connect_to_file_server(self, ):
         self.s_fs = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s_fs.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10 ** 7)
-        self.s_fs.bind("localhost", 8457)
+        self.s_fs.bind(("localhost", 8719))
         self.super_secret_file_key = os.popen("echo %YCAP_FILE_KEY%").read()
-        got = False
-        while not got:
-            conn = self.s.accept()
+        while True:
+            self.s_fs.listen()
+            conn = self.s_fs.accept()
             conn = conn[0]
-            if conn.recv(1024).decode() == "":
-                pass
+            if conn.recv(1024).decode() == self.super_secret_file_key:
+                # File server authenticated
+                print("File server ",end="")
+                verify_packet = json.loads(conn.recv(1024).decode())
+                print("authentication packet received")
+                username = self.connections.get(verify_packet.get("client_key"))[1]
+                if username == None:
+                    verified = False
+                else:
+                    verified = True
+                conn.send(json.dumps({"username":username, "verified":verified}).encode())
+                
+
 
 
     def shutdown(self):

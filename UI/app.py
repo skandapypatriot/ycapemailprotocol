@@ -100,7 +100,8 @@ def get_mails():
         formatted_mails = []
         for mail in mails:
             if mail:
-                mail_id, from_addr, to_addr, mail_type, data = mail
+                print(mail)
+                mail_id, from_addr, to_addr, mail_type, data, timestamp = mail
                 
                 # Check if it's a file
                 is_file = False
@@ -119,7 +120,8 @@ def get_mails():
                     'type': mail_type,
                     'data': data,
                     'is_file': is_file,
-                    'file_info': file_info
+                    'file_info': file_info,
+                    'timestamp': timestamp
                 })
         
         return jsonify(formatted_mails)
@@ -140,7 +142,7 @@ def get_sent():
         formatted_mails = []
         for mail in mails:
             if mail:
-                mail_id, from_addr, to_addr, mail_type, data = mail
+                mail_id, from_addr, to_addr, mail_type, data,timestamp = mail
                 is_file = False
                 file_info = None
                 if mail_type == 'file':
@@ -157,9 +159,9 @@ def get_sent():
                     'type': mail_type,
                     'data': data,
                     'is_file': is_file,
-                    'file_info': file_info
+                    'file_info': file_info,
+                    'timestamp': timestamp
                 })
-        
         return jsonify(formatted_mails)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -172,7 +174,8 @@ def send_mail():
     
     data = request.get_json()
     to_addr = data.get('to')
-    mail_type = data.get('type', 'text')
+    mail_type = data.get('type')
+    print(mail_type, data)
     content = data.get('content')
     
     try:

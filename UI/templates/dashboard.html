@@ -340,13 +340,14 @@
             container.innerHTML = '<p style="color: #999; text-align: center; padding: 2rem;">No messages</p>';
             return;
         }
-        
+        console.log(mails)
         container.innerHTML = mails.map(mail => {
-            const hasFile = mail.file_info || (mail.data && mail.data.includes('file_hash'));
+            const hasFile = mail.is_file
             return `
             <div class="mail-item ${hasFile ? 'file' : ''}" onclick="showMail('${mail.id}', ${JSON.stringify(mail).replace(/'/g, "&apos;")})">
                 <div class="mail-header">
                     <span class="mail-from">${mail.from}</span>
+                    <span class="mail-from">${mail.timestamp}</span>
                     <span class="mail-type-badge ${hasFile ? 'file' : ''}">${hasFile ? '📎 File' : '📝 ' + mail.type}</span>
                 </div>
                 <div class="mail-preview">${mail.file_info ? mail.file_info.filename : (typeof mail.data === 'string' ? mail.data.substring(0, 100) : 'Message')}</div>
@@ -364,6 +365,9 @@
                 mailData = JSON.parse(mailData);
             } catch (e) {
                 // Keep as string if not JSON
+                console.log(
+                    "here 368"
+                )
             }
         }
         
@@ -410,6 +414,7 @@
     async function sendMessage() {
         const to = document.getElementById('composeTo').value.trim();
         const type = document.getElementById('composeType').value;
+        console.log(type)
         const content = document.getElementById('composeContent').value;
         
         if (!to || !content) {
