@@ -57,7 +57,8 @@ class Server:
             to_ TEXT,
             type_ TEXT,
             data TEXT,
-            timestamp TEST
+            timestamp TEXT,
+            file_info TEXT
         )
         """)
         self.c.execute("""
@@ -218,9 +219,8 @@ class Server:
             connection.send(json.dumps(response).encode())
         if command == "GMA": 
             mail_id = arg[0]
-            query = "SELECT id, from_, to_, type_, data, timestamp FROM mail WHERE id=?"
+            query = "SELECT id, from_, to_, type_, data, timestamp, file_info FROM mail WHERE id=?"
             result = self.c.execute(query, [mail_id]).fetchall()
-            print(result)
             response = {
                     "connection_key": str(key),
                     "command": "GMA",
@@ -235,21 +235,21 @@ class Server:
             to_ = arg[0][1]
             mail_type = arg[1]
             mail_data:str = arg[2]
-            file_hash = arg[3] if len(arg) > 3 else None
+            file_info = arg[3]
             mail_id = secrets.token_hex(8)
             timestamp = arg[0][2]
-            
+            print(file_info)
+            if not file_info:
+                file_info = None
             if self.c.execute("SELECT username FROM users WHERE username=?", [to_]).fetchall() != []:
                 # Create email content with optional file attachment
                 email_content = mail_data.strip('"')
-                
-                if file_hash:
-                    email_content["file_hash"] = file_hash
+
                 
                 # Insert mail into database
                 self.c.execute(
-                    "INSERT INTO mail (id, from_, to_, type_, data, timestamp) VALUES (?, ?, ?, ?, ?, ?)", 
-                    (mail_id, from_, to_, mail_type, json.dumps(email_content), timestamp)
+                    "INSERT INTO mail (id, from_, to_, type_, data, timestamp, file_info) VALUES (?, ?, ?, ?, ?, ?, ?)", 
+                    (mail_id, from_, to_, mail_type, json.dumps(email_content), timestamp, str(file_info))
                 )
                 self.db.commit()
                 

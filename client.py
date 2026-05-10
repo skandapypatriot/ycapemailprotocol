@@ -145,53 +145,39 @@ class Client:
         
         return False
 
-    def send_mail(self, to_addr, mail_type, mail_data, file_path=None):
+    def send_mail(self, to_addr, mail_type, mail_data, file=None):
         """Send an email with optional file attachment.
         
         Args:
             to_addr (str): Recipient's email address
             mail_type (str): Type of mail (e.g., 'text', 'html')
             mail_data (str): Email content
-            file_path (str, optional): Path to file to attach
+            file_content (str, optional): Path to file to attach
             
         Returns:
             dict: Server response containing status and new mail ID
         """
-        print(mail_type)
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 10 ** 7)
-        now = datetime.datetime.now()
-        timestamp = f"{now:%d-%m-%y (%H:%M:%S)}"
-        file_hash = None
         
+        timestamp = round(datetime.datetime.now().timestamp(),0)
+        file_hash = None
         # If file is provided, upload it first
-        if file_path:
-            if not os.path.exists(file_path):
-                print(f"File not found: {file_path}")
-                
-            else:
-                filename = os.path.basename(file_path)
-                with open(file_path, 'rb') as f:
-                    filedata = f.read()
-
-                filesize = len(filedata) / 1024
-                file_hash = hashlib.sha256(filedata).hexdigest()[:16]
-
+        if file:
+                filedata = file.get("file_data")
+                file_name = file.get("name")
+                file_hash = hashlib.sha256(filedata.encode()).hexdigest()[:16]
+                file_size = file.get("file_size") 
                 # Upload file to file server
-                if not self._upload_to_file_server(file_hash, filename, filedata):
+                if not self._upload_to_file_server(file_hash, file_name, filedata, file_size):
                     print("Warning: File upload failed, sending email without attachment")
-                    file_hash = None
         
         # Send email
         packet = {
             "connection_key": self.key,
             "command": "YAP",
-            "arguments": [[self.emailaddress, to_addr, timestamp], mail_type, mail_data, ]
+            "arguments": [[self.emailaddress, normalize_email(to_addr), timestamp], mail_type, mail_data, {"name":file_name, "filehash":file_hash, "filesize":file_size} if file else {}]
         }
-        
-        # Add file hash if file was uploaded
-        if file_hash:
-            packet["arguments"].append(file_hash)
-        
+
         self.s.send(json.dumps(packet).encode())
         
         try:
@@ -205,52 +191,56 @@ class Client:
             print(f"Error sending mail: {e}")
             return None
     
-    def send_file(self, to_addr, file_path, message=""):
-        """Send a file with optional message.
-        
-        Args:
-            to_addr (str): Recipient's email address
-            file_path (str): Path to file to send
-            message (str, optional): Message to include with file
-            
-        Returns:
-            dict: Server response with mail ID and file hash
-        """
-        return self.send_mail(to_addr, "file", message, file_path)
     
-    def _upload_to_file_server(self, file_hash, filename, filedata):
+    def _upload_to_file_server(self, file_hash, filename, filedata, filesize):
         """Upload file to file server"""
+        fs = socket.create_connection(self.file_server_addr, timeout=10)
+        fs.settimeout(10)
+
+        # Ensure we have a base64 string for transfer
+        if isinstance(filedata, (bytes, bytearray)):
+            filedata_b64 = base64.b64encode(filedata).decode()
+        else:
+            filedata_b64 = filedata
+
+        # Write a local debug copy (decoded) so we can inspect for corruption
         try:
-            fs = socket.create_connection(self.file_server_addr, timeout=10)
-            fs.settimeout(10)
-            
-            # Authenticate with file server
-            auth_packet = {
-                "client_key": self.key
-            }
-            fs.send(json.dumps(auth_packet).encode())
-            auth_response = json.loads(fs.recv(1024).decode())
-            
-            if auth_response.get("status") != "AUTHORIZED":
-                print(f"File server auth failed: {auth_response.get('message')}")
-                fs.close()
-                return False
-            
-            # Upload file
-            upload_packet = {
-                "command": "UPLOAD",
-                "file_hash": file_hash,
-                "file_data":filedata,
-                "filename": filename,
-            }
-            fs.send(json.dumps(upload_packet).encode())
-            upload_response = json.loads(fs.recv(1024).decode())
-            
-            fs.close()
-            return upload_response.get("status") == "SUCCESS"
+            debug_dir = os.path.join(os.getcwd(), "ycap_debug")
+            os.makedirs(debug_dir, exist_ok=True)
+            debug_path = os.path.join(debug_dir, f"upload_{file_hash}")
+            with open(debug_path, 'wb') as df:
+                df.write(base64.b64decode(filedata_b64))
+            print(f"Wrote debug upload file to: {debug_path}")
         except Exception as e:
-            print(f"Error uploading to file server: {e}")
+            print(f"Could not write debug file: {e}")
+
+        # Authenticate with file server
+        auth_packet = {"client_key": self.key}
+        fs.send(json.dumps(auth_packet).encode())
+        auth_response = json.loads(fs.recv(1024).decode())
+        if auth_response.get("status") != "AUTHORIZED":
+            print(f"File server auth failed: {auth_response.get('message')}")
+            fs.close()
             return False
+
+        # Upload file (send base64 string)
+        upload_packet = {
+            "command": "UPLOAD",
+            "file_hash": file_hash,
+            "file_data": filedata_b64,
+            "filename": filename,
+            "file_size": filesize
+        }
+        fs.send(json.dumps(upload_packet).encode())
+        try:
+            upload_response = json.loads(fs.recv(1024).decode())
+        except Exception as e:
+            print(f"No response from file server after upload: {e}")
+            fs.close()
+            return False
+
+        fs.close()
+        return upload_response.get("status") == "SUCCESS"
     
     def GMA(self, id):
         packet = {

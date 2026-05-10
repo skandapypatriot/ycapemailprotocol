@@ -1,5 +1,9 @@
+import datetime
+import shutil
 import sys
 import os
+import base64
+
 
 # Add parent directory to path so we can import client
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -96,23 +100,27 @@ def get_mails():
         if not mails:
             return jsonify([])
         
-        # Format mails for display
+        # Format mails for display 
         formatted_mails = []
+        mails = list(reversed(sorted(mails, key=lambda x : x[5])))
+        print(mails)
         for mail in mails:
             if mail:
-                print(mail)
-                mail_id, from_addr, to_addr, mail_type, data, timestamp = mail
+                mail_id, from_addr, to_addr, mail_type, data, timestamp,file_info = mail
+                timestamp = float(timestamp)
+                if file_info == {}:
+                    is_file = False
+                else:
+                    is_file=True
                 
-                # Check if it's a file
-                is_file = False
-                file_info = None
                 if mail_type == 'file':
                     try:
                         file_info = json.loads(data)
                         is_file = True
                     except:
                         pass
-                
+                time_stamp_now_obj = datetime.datetime.fromtimestamp(timestamp)
+                print(timestamp,f"{time_stamp_now_obj:%d-%m-%y (%H:%M)}")
                 formatted_mails.append({
                     'id': mail_id,
                     'from': from_addr,
@@ -121,8 +129,9 @@ def get_mails():
                     'data': data,
                     'is_file': is_file,
                     'file_info': file_info,
-                    'timestamp': timestamp
+                    'timestamp': f"{time_stamp_now_obj:%d-%m-%y (%H:%M:%S)}"
                 })
+                
         
         return jsonify(formatted_mails)
     except Exception as e:
@@ -166,23 +175,6 @@ def get_sent():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/send-mail', methods=['POST'])
-@login_required
-def send_mail():
-    client_id = session['client_id']
-    client = clients[client_id]
-    
-    data = request.get_json()
-    to_addr = data.get('to')
-    mail_type = data.get('type')
-    print(mail_type, data)
-    content = data.get('content')
-    
-    try:
-        result = client.send_mail(to_addr, mail_type, content)
-        return jsonify({'success': True, 'result': result})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/send-message', methods=['POST'])
 @login_required
@@ -190,68 +182,21 @@ def send_message():
     """Send message with optional file attachment"""
     client_id = session['client_id']
     client = clients[client_id]
-    
-    to_addr = request.form.get('to')
-    mail_type = request.form.get('type', 'text')
-    content = request.form.get('content')
-    file = request.files.get('file')
-    
+    data = request.get_json()
+    to_addr = data.get('to')
+    mail_type = data.get('type')
+    content = data.get('content')
+    file = data.get('file')
     if not to_addr or not content:
         return jsonify({'success': False, 'error': 'Missing recipient or content'}), 400
     
-    try:
-        file_path = None
-        if file:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
-                file.save(tmp.name)
-                file_path = tmp.name
-        
-        try:
-            result = client.send_mail(to_addr, mail_type, content, file_path)
-            return jsonify({'success': True, 'result': result})
-        finally:
-            if file_path and os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                except:
-                    pass
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+    # try:
+    result = client.send_mail(to_addr, mail_type, content, file)
+    return jsonify({'success': True, 'result': result})
 
-@app.route('/api/send-file', methods=['POST'])
-@login_required
-def send_file_api():
-    client_id = session['client_id']
-    client = clients[client_id]
-    
-    if 'file' not in request.files:
-        return jsonify({'success': False, 'error': 'No file provided'}), 400
-    
-    file = request.files['file']
-    to_addr = request.form.get('to')
-    
-    if not file or not to_addr:
-        return jsonify({'success': False, 'error': 'Missing file or recipient'}), 400
-    
-    try:
-        # Save file to temporary location
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
-            file.save(tmp.name)
-            temp_path = tmp.name
-        
-        try:
-            # Send file
-            result = client.send_file(to_addr, temp_path)
-            return jsonify({'success': True, 'result': result})
-        finally:
-            # Clean up temporary file
-            if os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except:
-                    pass
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+    # except Exception as e:
+    #     return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/download-file/<file_hash>', methods=['GET'])
 @login_required

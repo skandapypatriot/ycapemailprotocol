@@ -83,7 +83,7 @@ echo.
 REM Start Mail Server in new window
 echo Starting Mail Server on localhost:1200...
 start "YCAP Mail Server" /D "%CD%" cmd /k python server.py
-timeout /t 2 /nobreak
+timeout /t 2 /nobreak 
 
 REM Start File Server in new window
 echo Starting File Server on localhost:5124...
