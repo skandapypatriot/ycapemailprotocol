@@ -204,15 +204,15 @@ class Client:
             filedata_b64 = filedata
 
         # Write a local debug copy (decoded) so we can inspect for corruption
-        try:
-            debug_dir = os.path.join(os.getcwd(), "ycap_debug")
-            os.makedirs(debug_dir, exist_ok=True)
-            debug_path = os.path.join(debug_dir, f"upload_{file_hash}")
-            with open(debug_path, 'wb') as df:
-                df.write(base64.b64decode(filedata_b64))
-            print(f"Wrote debug upload file to: {debug_path}")
-        except Exception as e:
-            print(f"Could not write debug file: {e}")
+        # try:
+        #     debug_dir = os.path.join(os.getcwd(), "ycap_debug")
+        #     os.makedirs(debug_dir, exist_ok=True)
+        #     debug_path = os.path.join(debug_dir, f"upload_{file_hash}")
+        #     with open(debug_path, 'wb') as df:
+        #         df.write(base64.b64decode(filedata_b64))
+        #     print(f"Wrote debug upload file to: {debug_path}")
+        # except Exception as e:
+        #     print(f"Could not write debug file: {e}")
 
         # Authenticate with file server
         auth_packet = {"client_key": self.key}
@@ -257,7 +257,52 @@ class Client:
             print("No response or error:", e)
             return None
     
-    def download_file(self, file_hash, save_path=None):
+    def delete_file(self, file_hash):
+        """Delete a file from file server.
+        
+        Args:
+            file_hash (str): Hash ID of file to delete
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            fs = socket.create_connection(self.file_server_addr, timeout=10)
+            fs.settimeout(10)
+            
+            # Authenticate
+            auth_packet = {
+                "client_key": self.key
+            }
+            fs.send(json.dumps(auth_packet).encode())
+            auth_response = json.loads(fs.recv(1024).decode())
+            
+            if auth_response.get("status") != "AUTHORIZED":
+                print("File server auth failed")
+                fs.close()
+                return False
+            
+            # Delete file
+            delete_packet = {
+                "command": "DELETE",
+                "file_hash": file_hash
+            }
+            fs.send(json.dumps(delete_packet).encode())
+            delete_response = json.loads(fs.recv(1024).decode())
+            
+            fs.close()
+            
+            if delete_response.get("status") == "SUCCESS":
+                print(f"File {file_hash} deleted successfully")
+                return True
+            else:
+                print(f"Delete failed: {delete_response.get('error')}")
+                return False
+        except Exception as e:
+            print(f"Error deleting file: {e}")
+            return False
+    
+    def download_file(self, file_hash, ):
         """Download a file from file server.
         
         Args:
@@ -289,22 +334,21 @@ class Client:
                 "file_hash": file_hash
             }
             fs.send(json.dumps(download_packet).encode())
-            download_response = json.loads(fs.recv(1024).decode())
-            
+            download_response = fs.recv(1024)
+            while download_response[len(download_response)-1] != 125:  # Wait for end of transmission marker
+                download_response += fs.recv(4096)
             fs.close()
+            download_response = json.loads(download_response.decode()) 
             
             if download_response.get("status") == "SUCCESS":
                 filename = download_response.get("filename")
                 filedata_b64 = download_response.get("filedata")
                 filedata = base64.b64decode(filedata_b64)
                 
-                if save_path:
-                    with open(save_path, 'wb') as f:
-                        f.write(filedata)
-                    print(f"File saved to {save_path}")
                 
                 return {
                     "filename": filename,
+                    "file_name": filename,
                     "uploader": download_response.get("uploader"),
                     "data": filedata
                 }

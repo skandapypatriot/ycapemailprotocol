@@ -113,10 +113,12 @@ def get_mails():
                 else:
                     is_file=True
                 
+                file_hash = None
                 if mail_type == 'file':
                     try:
                         file_info = json.loads(data)
                         is_file = True
+                        file_hash = file_info.get('file_hash')
                     except:
                         pass
                 time_stamp_now_obj = datetime.datetime.fromtimestamp(timestamp)
@@ -129,6 +131,7 @@ def get_mails():
                     'data': data,
                     'is_file': is_file,
                     'file_info': file_info,
+                    'file_hash': file_hash,
                     'timestamp': f"{time_stamp_now_obj:%d-%m-%y (%H:%M:%S)}"
                 })
                 
@@ -148,19 +151,29 @@ def get_sent():
         if not mails:
             return jsonify([])
         
+        # Format mails for display 
         formatted_mails = []
+        mails = list(reversed(sorted(mails, key=lambda x : x[5])))
+        print(mails)
         for mail in mails:
             if mail:
-                mail_id, from_addr, to_addr, mail_type, data,timestamp = mail
-                is_file = False
-                file_info = None
+                mail_id, from_addr, to_addr, mail_type, data, timestamp,file_info = mail
+                timestamp = float(timestamp)
+                if file_info == {}:
+                    is_file = False
+                else:
+                    is_file=True
+                
+                file_hash = None
                 if mail_type == 'file':
                     try:
                         file_info = json.loads(data)
                         is_file = True
+                        file_hash = file_info.get('file_hash')
                     except:
                         pass
-                
+                time_stamp_now_obj = datetime.datetime.fromtimestamp(timestamp)
+                print(timestamp,f"{time_stamp_now_obj:%d-%m-%y (%H:%M)}")
                 formatted_mails.append({
                     'id': mail_id,
                     'from': from_addr,
@@ -169,12 +182,14 @@ def get_sent():
                     'data': data,
                     'is_file': is_file,
                     'file_info': file_info,
-                    'timestamp': timestamp
+                    'file_hash': file_hash,
+                    'timestamp': f"{time_stamp_now_obj:%d-%m-%y (%H:%M:%S)}"
                 })
+                
+        
         return jsonify(formatted_mails)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/api/send-message', methods=['POST'])
 @login_required
@@ -225,6 +240,25 @@ def delete_mail(mail_id):
     client = clients[client_id]
     
     try:
+        # First, get the mail to check if it has a file attachment
+        mails = client.get_mail(sent=False, no=100)
+        if mails:
+            for mail in mails:
+                if mail and mail[0] == mail_id:
+                    # Check if mail has file info
+                    file_info_str = mail[6] if len(mail) > 6 else None
+                    if file_info_str and file_info_str != '{}' and file_info_str != 'None':
+                        try:
+                            file_info = json.loads(file_info_str.replace("'", '"'))
+                            file_hash = file_info.get('filehash') or file_info.get('file_hash')
+                            if file_hash:
+                                # Delete file from file server
+                                client.delete_file(file_hash)
+                        except Exception as e:
+                            print(f"Error parsing file info or deleting file: {e}")
+                    break
+        
+        # Delete mail from mail server
         result = client.NYAP(mail_id)
         return jsonify({'success': True, 'result': result})
     except Exception as e:

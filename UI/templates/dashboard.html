@@ -349,9 +349,8 @@
                 <div class="mail-header">
                     <span class="mail-from">${mail.from}</span>
                     <span class="mail-from">${mail.timestamp}</span>
-                    <span class="mail-type-badge ${hasFile ? '📎 File' : ""}</span>
+                    <span class="mail-type-badge${hasFile ? ' file' : ''}}">${hasFile ? '📎 File' : '📝 Text'}</span>
                 </div>
-                <div class="mail-preview">${(typeof mail.data === 'string' ? mail.data.substring(0, 45) +"..." : 'Message')}</div>
             </div>
         `}).join('');
     }
@@ -372,22 +371,25 @@
             <p><strong style="color: #1e3c72;">To:</strong> ${mail.to}</p>
             <hr style="border: none; border-top: 1px solid #f0f0f0; margin: 1.5rem 0;">
         `;
-        console.log(mail.data)
-        if (typeof mailData === 'object' && mailData.data) {
-            // Mixed content (text + optional file)
-
-            if (mail.type === "text"|| !mail.is_file || mail.file_info === null) {
-                html += `<p style="color: #333; line-height: 1.6;word-break:break-word;">${mail.data}</p>`;
-                
-            }
-            else if (mailData.is_file & (mailData.file_info === "None" & mailData.file_info == null)) {
-                html += `
-                    <hr style="border: none; border-top: 1px solid #f0f0f0; margin: 1.5rem 0;">
-                    <p><strong style="color: #1e3c72;">📎 Attachment:</strong></p>
-                    <button class="btn" onclick="downloadFile('${mailData.file_hash}', 'attachment')">⬇️ Download Attachment</button>
-                `;
-            }
-            }
+        console.log(mail)
+        
+        // Show text content if present and not a file-only message
+        if (mail.data && (mail.type === "text" || !mail.is_file)) {
+            html += `<p style="color: #333; line-height: 1.6;word-break:break-word;">${mail.data}</p>`;
+        }
+        
+        // Show file attachment if present
+        if (mail.is_file && mail.file_info !== null && mail.file_info !== "None") {
+            
+            mail.file_info = mail.file_info.replace(/'/g, '"');
+            console.log(mail.file_info)
+            file_info = JSON.parse(mail.file_info)
+            html += `
+                <hr style="border: none; border-top: 1px solid #f0f0f0; margin: 1.5rem 0;">
+                <p><strong style="color: #1e3c72;">📎 Attachment: ${file_info.name}</strong></p>
+                <button class="btn" onclick="downloadFile('${file_info.filehash}', 'attachment')">⬇️ Download Attachment</button>
+            `;
+        }
 
         html += `<button class="btn btn-danger" onclick="deleteMail('${id}')" style="margin-top: 1.5rem;">🗑️ Delete</button>`;
 
