@@ -254,8 +254,6 @@ If you hit a bug that looks criminally funny, open an issue — we want to hear 
 
 ## License
 
-MIT License. Use responsibly, and please don't cause too much chaos with this protocol.
+noLicense. Use responsibly, and please don't cause too much chaos with this protocol.
 
 ---
-
-*If you read this far, congratulations — you are now a Certified YCAP Brainrot Specialist.*
